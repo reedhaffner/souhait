@@ -1,2 +1,7 @@
 # souhait
-Self-hostable site-agnostic wishlist webapp
+Wishlist app which is
+- RESTful
+- Self Hostable (docker)
+- WebApp
+- Speedy
+- Site-Agnostic
