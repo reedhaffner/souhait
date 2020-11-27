@@ -5,15 +5,20 @@ var apidoc = require("apidoc");
 
 var db = require("../functions/db");
 var func = require("../functions/func");
+var auth = require("../functions/auth");
 
 const doc = apidoc.createDoc({
     src: path.resolve(__dirname, ""),
     dest: path.resolve(__dirname, "/../pages/api/"),
 });
 
+function doesUserOwn(list, username) {
+    return list["user"] == username;
+}
+
 router.use("/", express.static(path.resolve(__dirname, "/../pages/api/")));
 
-router.get("/lists/", (req, res) => {
+router.get("/lists/", auth.requireAuth, (req, res) => {
     /**
      * @api {get} /lists/ Request list of lists
      * @apiName GetLists
@@ -21,9 +26,15 @@ router.get("/lists/", (req, res) => {
      *
      * @apiSuccess {Object[]} N/A  List of lists.
      */
-    res.status(200).send(db.keys());
+    ownedLists = [];
+    db.keys().forEach((item) => {
+        if (doesUserOwn(db.get(item), req.user)) {
+            ownedLists.push(item);
+        }
+    });
+    res.status(200).send(ownedLists);
 });
-router.post("/lists/", (req, res) => {
+router.post("/lists/", auth.requireAuth, (req, res) => {
     /**
      * @api {post} /lists/ Create new list
      * @apiName PostLists
@@ -41,6 +52,7 @@ router.post("/lists/", (req, res) => {
         } else {
             db.put(cleansed, {
                 title: req.body.title,
+                user: req.user,
                 items: [],
             });
             res.status(200).send(cleansed).end();
@@ -50,7 +62,7 @@ router.post("/lists/", (req, res) => {
         res.end();
     }
 });
-router.put("/lists/:listTitle", (req, res) => {
+router.put("/lists/:listTitle", auth.requireAuth, (req, res) => {
     /**
      * @api {put} /lists/:listTitle Edits list title
      * @apiName PutLists
@@ -65,11 +77,15 @@ router.put("/lists/:listTitle", (req, res) => {
     try {
         var cleansed = func.cleanse_list_name(req.params.listTitle);
         if (db.has(cleansed)) {
-            db.put(cleansed, {
-                title: req.body.title,
-                items: db.get(cleansed).items,
-            });
-            res.status(200).send(cleansed).end();
+            if (doesUserOwn(db.get(cleansed), req.user)) {
+                db.put(cleansed, {
+                    title: req.body.title,
+                    items: db.get(cleansed).items,
+                });
+                res.status(200).send(cleansed).end();
+            } else {
+                res.status(401).send("List not owned by user").end();
+            }
         } else {
             res.status(400).send("List does not exist.").end();
         }
@@ -77,7 +93,7 @@ router.put("/lists/:listTitle", (req, res) => {
         res.end(error);
     }
 });
-router.delete("/lists/:listTitle", (req, res) => {
+router.delete("/lists/:listTitle", auth.requireAuth, (req, res) => {
     /**
      * @api {delete} /lists/:listTitle Deletes list
      * @apiName DeleteLists
@@ -91,8 +107,12 @@ router.delete("/lists/:listTitle", (req, res) => {
     try {
         var cleansed = func.cleanse_list_name(req.params.listTitle);
         if (db.has(cleansed)) {
-            db.del(cleansed);
-            res.status(200).send("List successfully deleted.").end();
+            if (doesUserOwn(db.get(cleansed), req.user)) {
+                db.del(cleansed);
+                res.status(200).send("List successfully deleted.").end();
+            } else {
+                res.status(401).send("List not owned by user").end();
+            }
         } else {
             res.status(400).send("List does not exist.").end();
         }
@@ -102,7 +122,7 @@ router.delete("/lists/:listTitle", (req, res) => {
 });
 
 // Manipulation of Items in Lists
-router.get("/lists/:listTitle", (req, res) => {
+router.get("/lists/:listTitle", auth.requireAuth, (req, res) => {
     /**
      * @api {get} /lists/:listTitle Request list items
      * @apiName GetList
@@ -112,9 +132,13 @@ router.get("/lists/:listTitle", (req, res) => {
      *
      * @apiSuccess {Object[]} N/A  List items
      */
-    res.status(200).send(db.get(req.params.listTitle));
+    if (doesUserOwn(db.get(req.params.listTitle), req.user)) {
+        res.status(200).send(db.get(req.params.listTitle));
+    } else {
+        res.status(401).send("List not owned by user").end();
+    }
 });
-router.post("/lists/:listTitle", (req, res) => {
+router.post("/lists/:listTitle", auth.requireAuth, (req, res) => {
     /**
      * @api {post} /lists/:listTitle Creates a list item
      * @apiName PostList
@@ -133,18 +157,22 @@ router.post("/lists/:listTitle", (req, res) => {
         }
         var cleansed = func.cleanse_list_name(req.params.listTitle);
         var list = db.get(cleansed);
-        var itemId = list.items.length;
-        list.items.push({
-            title: req.body.title,
-            url: req.body.url,
-        });
-        db.put(cleansed, list);
-        res.status(200).send(String(itemId)).end();
+        if (doesUserOwn(list, req.user)) {
+            var itemId = list.items.length;
+            list.items.push({
+                title: req.body.title,
+                url: req.body.url,
+            });
+            db.put(cleansed, list);
+            res.status(200).send(String(itemId)).end();
+        } else {
+            res.status(401).send("List not owned by user").end();
+        }
     } catch (error) {
         res.end(error);
     }
 });
-router.put("/lists/:listTitle/:itemId", (req, res) => {
+router.put("/lists/:listTitle/:itemId", auth.requireAuth, (req, res) => {
     /**
      * @api {post} /lists/:listTitle/:itemId Edits a list item
      * @apiName PutList
@@ -164,17 +192,21 @@ router.put("/lists/:listTitle/:itemId", (req, res) => {
         }
         var cleansed = func.cleanse_list_name(req.params.listTitle);
         var list = db.get(cleansed);
-        list.items[req.params.itemId] = {
-            title: req.body.title,
-            url: req.body.url,
-        };
-        db.put(cleansed, list);
-        res.status(200).send("Item successfully edited.").end();
+        if (doesUserOwn(list, req.user)) {
+            list.items[req.params.itemId] = {
+                title: req.body.title,
+                url: req.body.url,
+            };
+            db.put(cleansed, list);
+            res.status(200).send("Item successfully edited.").end();
+        } else {
+            res.status(401).send("List not owned by user").end();
+        }
     } catch (error) {
         res.end(error);
     }
 });
-router.delete("/lists/:listTitle/:itemId", (req, res) => {
+router.delete("/lists/:listTitle/:itemId", auth.requireAuth, (req, res) => {
     /**
      * @api {post} /lists/:listTitle/:itemId Delete a list item
      * @apiName DeleteList
@@ -188,9 +220,13 @@ router.delete("/lists/:listTitle/:itemId", (req, res) => {
     try {
         var cleansed = func.cleanse_list_name(req.params.listTitle);
         var list = db.get(cleansed);
-        list.items.splice([req.params.itemId], 1);
-        db.put(cleansed, list);
-        res.status(200).send("Item successfully deleted.").end();
+        if (doesUserOwn(list, req.user)) {
+            list.items.splice([req.params.itemId], 1);
+            db.put(cleansed, list);
+            res.status(200).send("Item successfully deleted.").end();
+        } else {
+            res.status(401).send("List not owned by user").end();
+        }
     } catch (error) {
         res.end(error);
     }

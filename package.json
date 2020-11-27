@@ -19,6 +19,7 @@
     "homepage": "https://github.com/reedhaffner/souhait#readme",
     "dependencies": {
         "apidoc": "^0.25.0",
+        "cookie-parser": "^1.4.5",
         "express": "^4.17.1",
         "flat-file-db": "^1.0.0"
     },
