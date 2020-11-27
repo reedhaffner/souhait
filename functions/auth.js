@@ -37,12 +37,11 @@ function loginUser(username, password) {
 }
 
 function requireAuth(req, res, next) {
-    console.log(req.cookies);
     if (authenticatedUsers[req.cookies.AuthToken]) {
         req.user = authenticatedUsers[req.cookies.AuthToken];
         next();
     } else {
-        res.status(401).send("unauthenticated");
+        res.redirect("/user/login?redirect=" + req.path);
     }
 }
 
@@ -61,6 +60,13 @@ router.post("/login", (req, res) => {
     }
 });
 
+router.get("/logout", requireAuth, (req, res) => {
+    if (authenticatedUsers[req.cookies.AuthToken]) {
+        delete authenticatedUsers[req.cookies.AuthToken];
+        res.send("logged out");
+    }
+});
+
 router.post("/register", (req, res) => {
     var username = req.body.username;
     var password = req.body.password;
@@ -72,6 +78,10 @@ router.post("/register", (req, res) => {
         registerUser(username, hashed);
         res.send("userCreated").end();
     }
+});
+
+router.get("/login", (req, res) => {
+    res.render("login");
 });
 
 module.exports = { router, requireAuth, authenticatedUsers };

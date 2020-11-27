@@ -1,0 +1,24 @@
+<form action="" method="">
+    <input type="text" name="username" id="username">
+    <input type="password" name="password" id="password">
+    <input type="button" value="Submit" id="submitform" onclick="loginAjax()">
+</form>
+
+<script>
+
+    function loginAjax() {
+        const queryString = window.location.search;
+        const urlParams = new URLSearchParams(queryString);
+        var redirectValue = urlParams.get('redirect')
+        console.log(queryString)
+        $.post("/user/login", {
+            username: $("#username").val(),
+            password: $("#password").val()
+        }, (data, status) => {
+            if (data == "authenticated") {
+                $(location).attr('href', redirectValue)
+            }
+        });
+    }
+
+</script>
